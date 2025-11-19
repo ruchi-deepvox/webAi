@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Agent - Portable UI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 30px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            margin: 0 0 10px 0;
+            color: #333;
+            text-align: center;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        textarea {
+            height: 90px;
+            resize: vertical;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .server-hint {
+            font-size: 12px;
+            color: #888;
+            margin-top: -5px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 12px 24px;
+            margin: 5px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .connect-btn {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+        .connect-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(40, 167, 69, 0.3); }
+        .connect-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .disconnect-btn {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+        }
+        .disconnect-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3); }
+        .disconnect-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .status {
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-weight: 500;
+            text-align: center;
+        }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .connecting { background: #fff3cd; color: #856404; }
+        .connected { background: #d4edda; color: #155724; }
+        .button-group {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .quick-presets {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .preset-btn {
+            padding: 8px 12px;
+            margin: 3px;
+            font-size: 13px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .preset-btn:hover { background: #5568d3; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🎤 Voice Agent</h1>
+        <div class="subtitle">Works on any device, any network!</div>
+        
+        <label for="serverUrl">🌐 Server URL:</label>
+        <input type="text" id="serverUrl" value="http://localhost:8000/api/connect" placeholder="http://192.168.0.102:8000/api/connect">
+        <div class="server-hint">
+            💡 Use <code>localhost</code> on same machine, or <code>192.168.0.102</code> from other devices
+        </div>
+        
+        <label for="prompt">🤖 Agent Instructions:</label>
+        <textarea id="prompt" placeholder="Enter custom instructions...">You are a helpful voice assistant. Be friendly and concise.</textarea>
+        
+        <div class="quick-presets">
+            <strong>Quick Presets:</strong><br>
+            <button class="preset-btn" onclick="setPreset('professional')">💼 Professional</button>
+            <button class="preset-btn" onclick="setPreset('friendly')">😊 Friendly</button>
+            <button class="preset-btn" onclick="setPreset('teacher')">👨‍🏫 Teacher</button>
+            <button class="preset-btn" onclick="setPreset('pirate')">🏴‍☠️ Pirate</button>
+        </div>
+        
+        <label for="ttsProvider">🗣️ TTS Provider:</label>
+        <select id="ttsProvider" onchange="updateVoiceId()">
+            <option value="cartesia">Cartesia (Fast & Natural)</option>
+            <option value="elevenlabs">ElevenLabs (High Quality)</option>
+        </select>
+        
+        <label for="voiceId">🎵 Voice ID (optional):</label>
+        <input type="text" id="voiceId" placeholder="Leave empty for default voice">
+        <div class="server-hint" id="voiceHint">
+            💡 Cartesia default: 9626c31c-bec5-4cca-baa8-f8ba9e84c8bc
+        </div>
+        
+        <div id="status" class="status disconnected">Ready to connect</div>
+        
+        <div class="button-group">
+            <button id="connectBtn" class="connect-btn" onclick="connect()">
+                🎙️ Connect & Talk
+            </button>
+            <button id="disconnectBtn" class="disconnect-btn" onclick="disconnect()" disabled>
+                ⏹️ Disconnect
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { Room, RoomEvent, Track } from 'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.esm.mjs';
+        
+        let room = null;
+
+        // Preset personalities
+        const presets = {
+            professional: "You are a professional business consultant. Be formal, concise, and focus on efficiency.",
+            friendly: "You are a warm and friendly assistant. Be conversational, empathetic, and helpful.",
+            teacher: "You are a patient and encouraging teacher. Explain things clearly and ask if the user understands.",
+            pirate: "You are a friendly pirate! Speak like a pirate, use nautical terms, but still be helpful. Arrr!"
+        };
+
+        window.setPreset = function(type) {
+            document.getElementById('prompt').value = presets[type];
+        }
+
+        window.updateVoiceId = function() {
+            const provider = document.getElementById('ttsProvider').value;
+            const voiceHint = document.getElementById('voiceHint');
+            
+            if (provider === 'elevenlabs') {
+                voiceHint.innerHTML = '💡 ElevenLabs default: 0p0kYzKW1Gq5uoKh8Qod';
+            } else {
+                voiceHint.innerHTML = '💡 Cartesia default: 9626c31c-bec5-4cca-baa8-f8ba9e84c8bc';
+            }
+        }
+
+        window.connect = async function() {
+            try {
+                // Clean up existing connection
+                if (room) {
+                    await window.disconnect();
+                    await new Promise(r => setTimeout(r, 500));
+                }
+
+                // Get configuration
+                const serverUrl = document.getElementById('serverUrl').value.trim();
+                const instructions = document.getElementById('prompt').value.trim();
+                const ttsProvider = document.getElementById('ttsProvider').value;
+                const voiceId = document.getElementById('voiceId').value.trim();
+                
+                if (!serverUrl) {
+                    alert('Please enter a server URL');
+                    return;
+                }
+
+                // Update status
+                document.getElementById('status').textContent = 'Connecting...';
+                document.getElementById('status').className = 'status connecting';
+                document.getElementById('connectBtn').disabled = true;
+
+                // Build request body
+                const requestBody = {
+                    room_name: `room-${Date.now()}`,
+                    user_name: 'User',
+                    instructions: instructions,
+                    tts_provider: ttsProvider
+                };
+                
+                // Add voice_id only if provided
+                if (voiceId) {
+                    requestBody.voice_id = voiceId;
+                }
+
+                // Call API
+                const response = await fetch(serverUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+
+                const { token, url } = await response.json();
+
+                // Create and setup room
+                room = new Room();
+
+                // Listen for agent audio
+                room.on(RoomEvent.TrackSubscribed, (track) => {
+                    if (track.kind === Track.Kind.Audio) {
+                        const audioElement = track.attach();
+                        audioElement.autoplay = true;
+                        audioElement.play().catch(e => {
+                            console.log('Autoplay prevented, user interaction needed');
+                        });
+                    }
+                });
+
+                // Update UI when connected
+                room.on(RoomEvent.Connected, () => {
+                    document.getElementById('status').textContent = '✅ Connected - Start Talking!';
+                    document.getElementById('status').className = 'status connected';
+                    document.getElementById('disconnectBtn').disabled = false;
+                });
+
+                // Handle disconnection
+                room.on(RoomEvent.Disconnected, () => {
+                    document.getElementById('status').textContent = 'Disconnected';
+                    document.getElementById('status').className = 'status disconnected';
+                    document.getElementById('connectBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = true;
+                });
+
+                // Connect
+                await room.connect(url, token);
+                await room.localParticipant.setMicrophoneEnabled(true);
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('status').textContent = '❌ Failed: ' + error.message;
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('connectBtn').disabled = false;
+            }
+        }
+
+        window.disconnect = async function() {
+            if (room) {
+                await room.localParticipant.setMicrophoneEnabled(false);
+                await room.disconnect();
+                room = null;
+                
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+            }
+        }
+
+        // Auto-detect if on different machine and update URL hint
+        window.addEventListener('load', () => {
+            const hostname = window.location.hostname;
+            if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+                document.getElementById('serverUrl').value = 'http://192.168.0.102:8000/api/connect';
+            }
+        });
+    </script>
+</body>
+</html>
+

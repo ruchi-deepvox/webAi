@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiveKit Agent Tester</title>
+    <script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            font-weight: 500;
+        }
+        .status.disconnected {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+        .status.connecting {
+            background: #ffc;
+            color: #860;
+            border: 1px solid #fc6;
+        }
+        .status.connected {
+            background: #efe;
+            color: #363;
+            border: 1px solid #9c9;
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        button.disconnect {
+            background: #cc0000;
+        }
+        button.disconnect:hover {
+            background: #990000;
+        }
+        .audio-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        .log {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 3px 0;
+        }
+        .log-entry.info { color: #0066cc; }
+        .log-entry.success { color: #00aa00; }
+        .log-entry.error { color: #cc0000; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 LiveKit Agent Voice Tester</h1>
+        <p>Connect to your LiveKit agent and start talking!</p>
+
+        <div id="status" class="status disconnected">
+            Status: Disconnected
+        </div>
+
+        <div class="input-group">
+            <label for="roomName">Room Name (optional - auto-generated if empty)</label>
+            <input type="text" id="roomName" placeholder="test-room-123">
+        </div>
+
+        <div>
+            <button id="connectBtn" onclick="connect()">Connect to Agent</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled class="disconnect">Disconnect</button>
+        </div>
+
+        <div class="audio-container">
+            <div id="audioElements"></div>
+        </div>
+
+        <div class="log" id="log">
+            <div class="log-entry info">Ready to connect...</div>
+        </div>
+    </div>
+
+    <script>
+        let room = null;
+        let audioContext = null;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(status, className) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = `Status: ${status}`;
+            statusDiv.className = `status ${className}`;
+        }
+
+        async function getToken(roomName) {
+            // For development, you'll need to generate a token
+            // You can use the LiveKit CLI: lk token create --join --room <room-name>
+            // Or implement a token server
+            
+            const response = await fetch(`http://localhost:7880/token?room=${roomName}&identity=web-client`);
+            if (!response.ok) {
+                throw new Error('Failed to get token. Make sure your agent is running in dev mode.');
+            }
+            const data = await response.json();
+            return data.token;
+        }
+
+        async function connect() {
+            try {
+                updateStatus('Connecting...', 'connecting');
+                log('Connecting to LiveKit...', 'info');
+
+                const roomName = document.getElementById('roomName').value || `test-room-${Date.now()}`;
+                log(`Room: ${roomName}`, 'info');
+
+                // Initialize LiveKit Room
+                room = new LivekitClient.Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                });
+
+                // Set up event listeners
+                room.on(LivekitClient.RoomEvent.TrackSubscribed, handleTrackSubscribed);
+                room.on(LivekitClient.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+                room.on(LivekitClient.RoomEvent.Disconnected, handleDisconnected);
+                room.on(LivekitClient.RoomEvent.ParticipantConnected, (participant) => {
+                    log(`Participant connected: ${participant.identity}`, 'success');
+                });
+
+                // Get token - this will fail if dev mode token server isn't available
+                try {
+                    const token = await getToken(roomName);
+                    const wsURL = 'ws://localhost:7880'; // Dev mode local URL
+                    
+                    await room.connect(wsURL, token);
+                    log('Connected to room!', 'success');
+                } catch (e) {
+                    // Fallback: Show instructions
+                    throw new Error('Cannot connect to dev mode. Please ensure:\n1. Agent is running with: uv run python src/agent.py dev\n2. Or use LiveKit Playground at https://cloud.livekit.io/');
+                }
+
+                // Enable microphone
+                await room.localParticipant.enableCameraAndMicrophone();
+                log('Microphone enabled', 'success');
+
+                updateStatus('Connected - Start talking!', 'connected');
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+                updateStatus('Connection failed', 'disconnected');
+                alert(error.message);
+            }
+        }
+
+        function handleTrackSubscribed(track, publication, participant) {
+            log(`Subscribed to ${participant.identity}'s ${track.kind}`, 'success');
+            
+            if (track.kind === LivekitClient.Track.Kind.Audio) {
+                const audioElement = track.attach();
+                audioElement.id = `audio-${participant.identity}`;
+                document.getElementById('audioElements').appendChild(audioElement);
+                log('Agent audio ready!', 'success');
+            }
+        }
+
+        function handleTrackUnsubscribed(track, publication, participant) {
+            log(`Unsubscribed from ${participant.identity}'s ${track.kind}`, 'info');
+            track.detach();
+        }
+
+        function handleDisconnected() {
+            log('Disconnected from room', 'info');
+            updateStatus('Disconnected', 'disconnected');
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+        }
+
+        async function disconnect() {
+            if (room) {
+                await room.disconnect();
+                room = null;
+                log('Disconnected', 'info');
+                updateStatus('Disconnected', 'disconnected');
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                document.getElementById('audioElements').innerHTML = '';
+            }
+        }
+    </script>
+</body>
+</html>
+
