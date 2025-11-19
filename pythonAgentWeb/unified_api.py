@@ -375,7 +375,7 @@ def api_docs():
         'usage_example': {
             'javascript': '''
 // Example: Connect to voice agent
-const response = await fetch('http://localhost:8000/api/connect', {
+const response = await fetch('http://35.154.238.173:8000api/connect', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -399,7 +399,7 @@ await room.localParticipant.setMicrophoneEnabled(true);
 import requests
 
 # Connect to voice agent
-response = requests.post('http://localhost:8000/api/connect', json={
+response = requests.post('http://35.154.238.173:8000api/connect', json={
     'room_name': 'my-room',
     'user_id': 'user-123',
     'user_name': 'John Doe'
@@ -431,11 +431,11 @@ if __name__ == '__main__':
     print("=" * 70)
     print(f"📡 LiveKit URL: {LIVEKIT_URL}")
     print(f"🌐 API Server: http://localhost:8000")
-    print(f"📚 Documentation: http://localhost:8000/api")
-    print(f"🏥 Health Check: http://localhost:8000/api/health")
+    print(f"📚 Documentation: http://35.154.238.173:8000api")
+    print(f"🏥 Health Check: http://35.154.238.173:8000api/health")
     print("=" * 70)
     print("\n🎯 Main Endpoint:")
-    print("   POST http://localhost:8000/api/connect")
+    print("   POST http://35.154.238.173:8000api/connect")
     print("   Body: { room_name, user_id, user_name }")
     print("\n💡 Make sure your agent is running:")
     print("   uv run python src/agent.py dev")
