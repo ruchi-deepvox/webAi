@@ -122,9 +122,9 @@
         <div class="subtitle">Works on any device, any network!</div>
         
         <label for="serverUrl">🌐 Server URL:</label>
-        <input type="text" id="serverUrl" value="http://35.154.238.173:8000api/connect" placeholder="http://192.168.0.102:8000/api/connect">
+        <input type="text" id="serverUrl" value="http://35.154.238.173:8000/api/connect" placeholder="http://35.154.238.173:8000/api/connect">
         <div class="server-hint">
-            💡 Use <code>localhost</code> on same machine, or <code>192.168.0.102</code> from other devices
+            💡 Use <code>localhost</code> on same machine, or <code>35.154.238.173</code> from other devices
         </div>
         
         <label for="prompt">🤖 Agent Instructions:</label>
@@ -298,7 +298,7 @@
         window.addEventListener('load', () => {
             const hostname = window.location.hostname;
             if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-                document.getElementById('serverUrl').value = 'http://192.168.0.102:8000/api/connect';
+                document.getElementById('serverUrl').value = 'http://35.154.238.173:8000/api/connect';
             }
         });
     </script>
